@@ -27,7 +27,7 @@ sealed class ControlActionButton:AppleButton {
     }
 }
 sealed class RemoteView:Control {
-    public BattleSettings Guides;public int? CombatAnchor;public Bitmap Frame;public long Sequence;public List<Rectangle> Selections=new List<Rectangle>();public Point Pick;public bool HasPick;public Dictionary<string,object> Person;public DateTime PersonAt;public Size SourceSize{get;set;}long lastPaint;public event Action<long> Painted;
+    public BattleSettings Guides;public int? CombatAnchor;public Bitmap Frame;public long Sequence;public List<Rectangle> Selections=new List<Rectangle>();public Point Pick;public bool HasPick;public Dictionary<string,object> Person;public DateTime PersonAt;public Point? LieTarget;public float LieConfidence;public DateTime LieTargetAt;public Size SourceSize{get;set;}long lastPaint;public event Action<long> Painted;
     public string EmptyMessage="未连接";
     public bool MapCalibration;
     public RemoteView(){Name="RemotePreview";AccessibleName="自适应远程画面";SetStyle(ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.UserPaint|ControlStyles.Selectable|ControlStyles.ResizeRedraw,true);TabStop=true;BackColor=Color.FromArgb(22,27,37);}
@@ -64,9 +64,19 @@ sealed class RemoteView:Control {
         }
     }
 
+    void PaintLieTarget(Graphics graphics,Rectangle area,double sx,double sy){
+        if(!LieTarget.HasValue||(DateTime.UtcNow-LieTargetAt).TotalMilliseconds>=600)return;
+        float x=(float)(area.X+LieTarget.Value.X*sx),y=(float)(area.Y+LieTarget.Value.Y*sy),half=20f;
+        using(var outline=new Pen(Color.FromArgb(25,35,25),7))using(var pen=new Pen(Color.Lime,3)){
+            graphics.DrawRectangle(outline,x-half,y-half,half*2,half*2);graphics.DrawRectangle(pen,x-half,y-half,half*2,half*2);
+            graphics.DrawLine(pen,x-5,y,x+5,y);graphics.DrawLine(pen,x,y-5,x,y+5);
+        }
+        string label=String.Format("测谎坐标 ({0}, {1}) 置信度 {2:0.00}",LieTarget.Value.X,LieTarget.Value.Y,LieConfidence);
+        using(var brush=new SolidBrush(Color.Lime))graphics.DrawString(label,Font,brush,x+24,y-28);
+    }
     protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);if(Frame==null){using(var b=new SolidBrush(Color.LightSteelBlue))e.Graphics.DrawString(EmptyMessage,Font,b,24,24);return;}e.Graphics.InterpolationMode=InterpolationMode.NearestNeighbor;e.Graphics.PixelOffsetMode=PixelOffsetMode.Half;var area=ImageRect();if(area.IsEmpty)return;e.Graphics.DrawImage(Frame,area);double sx=(double)area.Width/SourceSize.Width,sy=(double)area.Height/SourceSize.Height;
         if(MapCalibration){PaintMapCalibration(e.Graphics,area,sx,sy);return;}
-        foreach(var r in Selections)using(var pen=new Pen(Color.Cyan,2))e.Graphics.DrawRectangle(pen,(float)(area.X+r.X*sx),(float)(area.Y+r.Y*sy),(float)(r.Width*sx),(float)(r.Height*sy));if(HasPick){float x=(float)(area.X+Pick.X*sx),y=(float)(area.Y+Pick.Y*sy);using(var pen=new Pen(Color.OrangeRed,2)){e.Graphics.DrawLine(pen,x-9,y,x+9,y);e.Graphics.DrawLine(pen,x,y-9,x,y+9);}}PaintGuides(e.Graphics,area,sx,sy);PaintMonsters(e.Graphics,area,sx,sy);if(Person!=null&&(DateTime.UtcNow-PersonAt).TotalMilliseconds<800&&Wire.Bool(Person,"found")){object value;if(Person.TryGetValue("body",out value)){int[] body=Wire.IntArray(value);float x=(float)(area.X+body[0]*sx),y=(float)(area.Y+body[1]*sy);using(var pen=new Pen(Color.FromArgb(255,159,10),3)){e.Graphics.DrawEllipse(pen,x-6,y-6,12,12);e.Graphics.DrawLine(pen,x-10,y,x+10,y);e.Graphics.DrawLine(pen,x,y-10,x,y+10);}string direction=Wire.Str(Person,"direction");using(var brush=new SolidBrush(Color.Lime))e.Graphics.DrawString(direction=="left"?"← 朝左":direction=="right"?"朝右 →":"人物",Font,brush,x+9,y-22);}foreach(string key in new[]{"name_box","face_box"}){object box;if(Person.TryGetValue(key,out box)&&box!=null){int[] r=Wire.IntArray(box);using(var pen=new Pen(key=="name_box"?Color.Cyan:Color.Orange,2.5f))e.Graphics.DrawRectangle(pen,(float)(area.X+r[0]*sx),(float)(area.Y+r[1]*sy),(float)(r[2]*sx),(float)(r[3]*sy));}}}if(Sequence!=lastPaint){lastPaint=Sequence;if(Painted!=null)Painted(Sequence);}}
+        foreach(var r in Selections)using(var pen=new Pen(Color.Cyan,2))e.Graphics.DrawRectangle(pen,(float)(area.X+r.X*sx),(float)(area.Y+r.Y*sy),(float)(r.Width*sx),(float)(r.Height*sy));if(HasPick){float x=(float)(area.X+Pick.X*sx),y=(float)(area.Y+Pick.Y*sy);using(var pen=new Pen(Color.OrangeRed,2)){e.Graphics.DrawLine(pen,x-9,y,x+9,y);e.Graphics.DrawLine(pen,x,y-9,x,y+9);}}PaintGuides(e.Graphics,area,sx,sy);PaintMonsters(e.Graphics,area,sx,sy);PaintLieTarget(e.Graphics,area,sx,sy);if(Person!=null&&(DateTime.UtcNow-PersonAt).TotalMilliseconds<800&&Wire.Bool(Person,"found")){object value;if(Person.TryGetValue("body",out value)){int[] body=Wire.IntArray(value);float x=(float)(area.X+body[0]*sx),y=(float)(area.Y+body[1]*sy);using(var pen=new Pen(Color.FromArgb(255,159,10),3)){e.Graphics.DrawEllipse(pen,x-6,y-6,12,12);e.Graphics.DrawLine(pen,x-10,y,x+10,y);e.Graphics.DrawLine(pen,x,y-10,x,y+10);}string direction=Wire.Str(Person,"direction");using(var brush=new SolidBrush(Color.Lime))e.Graphics.DrawString(direction=="left"?"← 朝左":direction=="right"?"朝右 →":"人物",Font,brush,x+9,y-22);}foreach(string key in new[]{"name_box","face_box"}){object box;if(Person.TryGetValue(key,out box)&&box!=null){int[] r=Wire.IntArray(box);using(var pen=new Pen(key=="name_box"?Color.Cyan:Color.Orange,2.5f))e.Graphics.DrawRectangle(pen,(float)(area.X+r[0]*sx),(float)(area.Y+r[1]*sy),(float)(r[2]*sx),(float)(r[3]*sy));}}}if(Sequence!=lastPaint){lastPaint=Sequence;if(Painted!=null)Painted(Sequence);}}
     protected override void Dispose(bool disposing){if(disposing&&Frame!=null){Frame.Dispose();Frame=null;}base.Dispose(disposing);}
 }
 sealed class SettingsPages:TabControl {
@@ -86,7 +96,7 @@ public sealed class ControllerForm:Form {
     [DllImport("dwmapi.dll")]static extern int DwmSetWindowAttribute(IntPtr window,int attribute,ref int value,int size);
     [DllImport("winmm.dll")]static extern uint timeBeginPeriod(uint p);
     [DllImport("winmm.dll")]static extern uint timeEndPeriod(uint p);
-    readonly string root;readonly bool testMode;readonly RemoteView view=new RemoteView();readonly Label status=new Label(),metrics=new Label();readonly Button connect=new Button(),refresh=new Button(),typeText=new AppleButton();readonly ControlActionButton control=new ControlActionButton();readonly ComboBox targets=new WorkspaceComboBox();
+    readonly string root;readonly bool testMode;readonly RemoteView view=new RemoteView();readonly Label status=new Label(),metrics=new Label();readonly Button connect=new Button(),refresh=new Button(),typeText=new AppleButton(),lieButton=new AppleButton();readonly ControlActionButton control=new ControlActionButton();readonly ComboBox targets=new WorkspaceComboBox();readonly LocalTargetTrackClient lieVision;readonly PolygraphGameGate polygraphGate;
     readonly ConcurrentQueue<Dictionary<string,object>> queue=new ConcurrentQueue<Dictionary<string,object>>();readonly HashSet<int> pressed=new HashSet<int>();readonly object frameGate=new object();readonly System.Windows.Forms.Timer timer=new System.Windows.Forms.Timer();readonly List<object> samples=new List<object>();
     readonly FrameDecoder nativeFrames=new FrameDecoder();
     WorkspaceSettings workspace,savedWorkspace;bool settingsDirty,setupRequired;readonly Button saveSettings=new AppleButton();RoleSelector roleSelector;BattlePanel battlePanel;SkillsPanel skillsPanel;readonly Button runButton=new AppleButton();readonly CheckBox showGuides=new CheckBox{Checked=true};readonly RichTextBox activity=new RichTextBox();readonly object observationGate=new object();Dictionary<string,object> observation;double observationAt;volatile bool autoRunning,autoPending,routeTrial;bool autoArmPending;int autoEpoch;long autoWindow;CombatPlanner planner,trialPlanner;string lastAction="";
@@ -327,17 +337,18 @@ public sealed class ControllerForm:Form {
     Thread connectionWorker;
     Session session;Link frameLink,controlLink;Bitmap newest;Dictionary<string,object> newestHeader,currentHeader;
     bool lastPointerValid;Point lastPointer;long lastPointerWindow;
-    volatile string message="未连接";DateTime lastFrame=DateTime.MinValue,lastMove=DateTime.MinValue;long decoded,painted,bytes,hashChanges,previousDecoded,previousPainted,previousBytes,previousHashChanges,lastPaintTick,maxGapTicks;string oldHash="";long bucketAt=Stopwatch.GetTimestamp(),connectedAt;double fps,decodeFps,mbps,decodeMs;long lastLabels;long displayedWindow=-1;int disconnecting,metricsWritePending;
-    public ControllerForm(string path,bool test,bool autoConnect=true){root=path;testMode=test;workspace=WorkspaceFiles.Load(root);savedWorkspace=WorkspaceFiles.Copy(workspace);setupRequired=!File.Exists(Path.Combine(root,"workspace.json"));settingsDirty=false;Text="冒险工作台";BackColor=AppUi.Background;ForeColor=AppUi.Text;var work=Screen.PrimaryScreen.WorkingArea;Size=new Size(Math.Min(1120,work.Width-24),Math.Min(720,work.Height-24));MinimumSize=new Size(960,640);StartPosition=FormStartPosition.CenterScreen;Font=new Font("Microsoft YaHei UI",10);KeyPreview=true;
+    volatile string message="未连接";DateTime lastFrame=DateTime.MinValue,lastMove=DateTime.MinValue;long decoded,painted,bytes,hashChanges,previousDecoded,previousPainted,previousBytes,previousHashChanges,lastPaintTick,maxGapTicks;string oldHash="";long bucketAt=Stopwatch.GetTimestamp(),connectedAt,lieSubmitAt,lastLieSequence,lastLieGateAt,lastLabels;double fps,decodeFps,mbps,decodeMs;long displayedWindow=-1;int disconnecting,metricsWritePending,lieGateHits,lieGateMisses;bool lieRequested,lieGameActive;byte[] lieGatePixels;
+    public ControllerForm(string path,bool test,bool autoConnect=true){root=path;testMode=test;lieVision=new LocalTargetTrackClient(root);polygraphGate=new PolygraphGameGate(Path.Combine(root,"lie-runtime"));workspace=WorkspaceFiles.Load(root);savedWorkspace=WorkspaceFiles.Copy(workspace);setupRequired=!File.Exists(Path.Combine(root,"workspace.json"));settingsDirty=false;Text="冒险工作台";BackColor=AppUi.Background;ForeColor=AppUi.Text;var work=Screen.PrimaryScreen.WorkingArea;Size=new Size(Math.Min(1120,work.Width-24),Math.Min(720,work.Height-24));MinimumSize=new Size(960,640);StartPosition=FormStartPosition.CenterScreen;Font=new Font("Microsoft YaHei UI",10);KeyPreview=true;
         var navigation=new FlowLayoutPanel{Name="WorkspaceNavigation",Dock=DockStyle.Top,Height=49,WrapContents=false,
             Padding=new Padding(15,6,15,4),BackColor=AppUi.Surface};
-        previewButton.Text="预览";routeWorkspaceButton.Text="路线工坊";
-        routeWorkspaceButton.Name="WorkspaceRoutesButton";
-        foreach(var button in new[]{previewButton,routeWorkspaceButton,settingsButton}){
+        previewButton.Text="预览";routeWorkspaceButton.Text="路线工坊";lieButton.Text="开启测谎";
+        routeWorkspaceButton.Name="WorkspaceRoutesButton";lieButton.Name="LieVisionButton";
+        foreach(var button in new[]{previewButton,routeWorkspaceButton,lieButton,settingsButton}){
             button.Size=new Size(102,32);AppUi.Button(button);navigation.Controls.Add(button);
         }
         previewButton.Click+=delegate{ReturnToPreview();};
         routeWorkspaceButton.Click+=delegate{if(!settingsOpen||sideTabs.SelectedTab!=routePage)OpenRoutes();};
+        lieButton.Click+=delegate{ToggleLieVision();};
         var bar=new Panel{Dock=DockStyle.Top,Height=50,Padding=new Padding(18,7,18,5),BackColor=AppUi.Background};
         selectors=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=false,Name="HomeRouteSelectors",Margin=Padding.Empty};
         var actions=new FlowLayoutPanel{Dock=DockStyle.Right,Width=212,WrapContents=false,
@@ -375,6 +386,8 @@ public sealed class ControllerForm:Form {
         };
         AppUi.Button(saveSettings,true);AppUi.Button(runButton,true);
         AppUi.Button(connect,true);AppUi.Button(refresh);AppUi.Button(control);AppUi.Button(typeText);
+        lieVision.Target=delegate(LieVisionTarget target){SafeUi(delegate{if(!lieRequested||!lieGameActive||!lieVision.Enabled)return;view.LieTarget=target.Point;view.LieConfidence=target.Confidence;view.LieTargetAt=DateTime.UtcNow;view.Invalidate();});};
+        lieVision.StateChanged=delegate(string text){SafeUi(delegate{if(lieRequested&&lieGameActive){message="测谎识别 · "+text;Log(message);}});};
         actions.Controls.AddRange(new Control[]{saveSettings,runButton});
         var bottom=new TableLayoutPanel{Dock=DockStyle.Bottom,Height=43,ColumnCount=5,RowCount=1,
             Padding=new Padding(18,0,18,0),BackColor=AppUi.Surface};
@@ -468,6 +481,49 @@ public sealed class ControllerForm:Form {
     void SelectRole(string id){if(workspace.active==id)return;if(!ResolveUnsaved()){roleSelector.Refresh(workspace);return;}StopAll("切换角色");workspace.Current.vision=person.Profile;workspace.active=id;person.SetProfile(workspace.Current.vision);PlayerFiles.Save(Path.Combine(root,"players","current.json"),person.Profile);battlePanel.Build();skillsPanel.Build();roleSelector.Refresh(workspace);WorkspaceFiles.Save(root,workspace);savedWorkspace=WorkspaceFiles.Copy(workspace);settingsDirty=setupRequired=false;view.Guides=showGuides.Checked?workspace.Current.battle:null;view.CombatAnchor=null;Log("已切换预设 · "+workspace.Current.name);if(showGuides.Checked)BeginInvoke(new Action(StartPreview));}
     void RoleOperation(string action){if(!ResolveUnsaved())return;if(action=="删除"){if(workspace.roles.Count==1){message="至少保留一个角色预设";return;}if(MessageBox.Show(this,"删除当前角色预设？","删除预设",MessageBoxButtons.OKCancel,MessageBoxIcon.Question)!=DialogResult.OK)return;string old=workspace.active;SelectRole(workspace.roles.First(r=>r.id!=old).id);workspace.roles.RemoveAll(r=>r.id==old);roleSelector.Refresh(workspace);WorkspaceFiles.Save(root,workspace);savedWorkspace=WorkspaceFiles.Copy(workspace);return;}string initial=action=="新建"?"新角色":action=="复制"?workspace.Current.name+" 副本":workspace.Current.name;string name=RoleSelector.Ask(this,action+"角色预设",initial);if(name==null)return;Pause();if(action=="改名"){workspace.Current.name=name;workspace.Current.vision.name=name;WorkspaceFiles.Save(root,workspace);savedWorkspace=WorkspaceFiles.Copy(workspace);roleSelector.Refresh(workspace);return;}var role=action=="复制"?WorkspaceFiles.Copy(workspace.Current):new RolePreset();role.id=Guid.NewGuid().ToString("N");role.name=name;role.vision.name=name;workspace.roles.Add(role);SelectRole(role.id);}
     void StartPreview(){if(routeTrial||!showGuides.Checked||captureFrame!=null||!running||Interlocked.Read(ref target)==0)return;view.Guides=workspace.Current.battle;if(!person.Active)person.Start();}
+    void ToggleLieVision(){
+        if(lieRequested){StopLieVision("测谎识别已关闭");return;}
+        if(!running||!previewReady||view.Frame==null){message="请先连接并取得实时画面";return;}
+        if(!polygraphGate.Available){message="测谎游戏状态模板不可用："+polygraphGate.Error;Log(message);return;}
+        lieRequested=true;lieGameActive=false;lieGateHits=lieGateMisses=0;lastLieGateAt=0;view.LieTarget=null;view.LieConfidence=0;lieSubmitAt=lastLieSequence=0;message="测谎已开启 · 等待小游戏开始";Log(message);
+    }
+    void StopLieVision(string reason){
+        lieRequested=false;lieGameActive=false;lieGateHits=lieGateMisses=0;lastLieGateAt=0;lieVision.Stop();view.LieTarget=null;view.LieConfidence=0;lieSubmitAt=lastLieSequence=0;view.Invalidate();if(!String.IsNullOrEmpty(reason)){message=reason;Log(reason);}
+    }
+    void UpdateLieGameGate(long now,int width,int height){
+        if(now-lastLieGateAt<Stopwatch.Frequency/2)return;
+        lastLieGateAt=now;
+        double sx=width/1366.0,sy=height/768.0;
+        int x=(int)Math.Round(550*sx),y=(int)Math.Round(625*sy),w=Math.Max(1,(int)Math.Round(266*sx)),h=Math.Max(1,(int)Math.Round(45*sy));
+        if(x<0||y<0||x+w>width||y+h>height||w>1024||h>800){lieGateHits=0;lieGateMisses++;return;}
+        int needed=checked(w*h*3);if(lieGatePixels==null||lieGatePixels.Length!=needed)lieGatePixels=new byte[needed];
+        double correlation,difference;bool active;
+        try{nativeFrames.CopyNativeRegion(new Rectangle(x,y,w,h),lieGatePixels);active=polygraphGate.IsActive(lieGatePixels,w,h,out correlation,out difference);}
+        catch(Exception e){lieGateHits=0;lieGateMisses++;if(lieGateMisses==1){message="测谎状态检查暂不可用："+e.Message;Log(message);}return;}
+        if(active){lieGateHits++;lieGateMisses=0;}else{lieGateMisses++;lieGateHits=0;}
+        if(!lieGameActive&&lieGateHits>=2){
+            lieGameActive=true;lieGateMisses=0;lieSubmitAt=lastLieSequence=0;lieVision.Start();message="检测到测谎小游戏 · 正在启动识别";Log(message);
+        }else if(lieGameActive&&lieGateMisses>=2){
+            lieGameActive=false;lieGateHits=0;lieVision.Stop();view.LieTarget=null;view.LieConfidence=0;view.Invalidate();message="测谎已开启 · 等待小游戏开始";Log(message);
+        }
+    }
+    void FeedLieVision(long now){
+        if(!lieRequested||view.Frame==null||currentHeader==null)return;
+        if((DateTime.UtcNow-lastFrame).TotalMilliseconds>800){
+            lieGateHits=lieGateMisses=0;
+            if(lieGameActive){lieGameActive=false;lieVision.Stop();view.LieTarget=null;view.LieConfidence=0;view.Invalidate();}
+            return;
+        }
+        int width=Wire.Int(currentHeader,"width"),height=Wire.Int(currentHeader,"height");if(width<16||height<16)return;
+        UpdateLieGameGate(now,width,height);
+        if(!lieGameActive||!lieVision.Enabled||view.Sequence==lastLieSequence||now-lieSubmitAt<Stopwatch.Frequency/30)return;
+        int x=(int)Math.Round(307.0*width/1366),y=(int)Math.Round(119.0*height/768),w=(int)Math.Round(759.0*width/1366),h=(int)Math.Round(563.0*height/768);
+        x=Math.Max(0,Math.Min(width-1,x));y=Math.Max(0,Math.Min(height-1,y));w=Math.Max(1,Math.Min(width-x,w));h=Math.Max(1,Math.Min(height-y,h));
+        if(w>1024||h>800)return;
+        byte[] pixels=lieVision.Rent(checked(w*h*3));if(pixels==null)return;
+        try{nativeFrames.CopyNativeRegion(new Rectangle(x,y,w,h),pixels);lieVision.Submit(pixels,w,h,x,y);lastLieSequence=view.Sequence;lieSubmitAt=now;}
+        catch(Exception e){lieVision.Release(pixels);message="测谎画面暂不可用："+e.Message;}
+    }
     void StartAutomation(){if(settingsDirty||setupRequired){message="请先保存设置";return;}if(!running||Interlocked.Read(ref target)==0){message="请选择已连接的目标窗口";return;}Pause();routes.PauseRecording("开启脚本前暂停录制");var role=workspace.Current;if(role.battle.mode=="route"&&!routes.HasRuntimeRoute){SetSettingsOpen(false);message="请选择地图和已保存的路线";return;}try{var frame=CaptureNative();int w=Wire.Int(frame,"width"),h=Wire.Int(frame,"height");if(role.Key("hp")!=0&&!role.hp.Valid(w,h)){OpenSettingsPage(2);message="请先框选HP条";return;}if(role.Key("mp")!=0&&!role.mp.Valid(w,h)){OpenSettingsPage(2);message="请先框选MP条";return;}if(role.vision.mode!="yolo_expression"&&role.vision.nametag.png.Length==0){OpenSettingsPage(0);message="请先配置角色名签";return;}if(NeedsMinimap(role)&&person.MinimapForFrame(frame)==null){message="选中的地图还没有小地图标定";return;}if(role.battle.Profile.jumpAttack&&role.Key("jump")!=0&&role.Key("jump")==role.Key("attack")){OpenSettingsPage(2);message="跳跃与攻击需要不同的按键";return;}person.Stop("应用运行预设");routes.ShowGamePreview();if(!person.Active)person.Start();autoWindow=Interlocked.Read(ref target);autoPending=true;autoArmPending=false;message="正在准备人物定位…";Log("准备运行 · "+role.name);}catch(Exception e){message=e.Message;}}
     int ConfiguredJumpKey(){
         var binding=workspace.Current.Binding("jump");
@@ -929,8 +985,9 @@ public sealed class ControllerForm:Form {
         }catch(IOException){}catch(UnauthorizedAccessException){}
     }
     void ClearPreview(){
+        if(lieRequested||lieVision.Enabled)StopLieVision(null);
         lock(frameGate){if(newest!=null)newest.Dispose();newest=null;newestHeader=null;}
-        var old=view.Frame;view.Frame=null;view.Person=null;view.CombatAnchor=null;
+        var old=view.Frame;view.Frame=null;view.Person=null;view.CombatAnchor=null;view.LieTarget=null;view.LieConfidence=0;
         view.EmptyMessage=connectionFault??"已断开";
         if(old!=null)old.Dispose();
         currentHeader=null;displayedWindow=-1;lastFrame=DateTime.MinValue;
@@ -1085,7 +1142,7 @@ public sealed class ControllerForm:Form {
         });
     }
     void Render(object sender,EventArgs e){Bitmap image=null;Dictionary<string,object> header=null;lock(frameGate){if(newest!=null){image=newest;header=newestHeader;newest=null;}}if(image!=null&&(!running||captureFrame!=null)){image.Dispose();image=null;}if(image!=null){var old=view.Frame;view.Frame=image;view.SourceSize=new Size(Wire.Int(header,"width"),Wire.Int(header,"height"));currentHeader=header;view.Sequence=Wire.Long(header,"sequence");if(view.Visible)view.Invalidate();if(old!=null)old.Dispose();lastFrame=DateTime.UtcNow;displayedWindow=Wire.Long(header,"window");}
-        long now=Stopwatch.GetTimestamp();CheckFrameProgress(now);double seconds=(now-bucketAt)/(double)Stopwatch.Frequency;if(seconds>=1){long got=Interlocked.Read(ref decoded),size=Interlocked.Read(ref bytes),changed=Interlocked.Read(ref hashChanges);fps=(painted-previousPainted)/seconds;decodeFps=(got-previousDecoded)/seconds;mbps=(size-previousBytes)*8.0/seconds/1000000;double live=connectedAt==0?0:(now-connectedAt)/(double)Stopwatch.Frequency;
+        long now=Stopwatch.GetTimestamp();FeedLieVision(now);CheckFrameProgress(now);double seconds=(now-bucketAt)/(double)Stopwatch.Frequency;if(seconds>=1){long got=Interlocked.Read(ref decoded),size=Interlocked.Read(ref bytes),changed=Interlocked.Read(ref hashChanges);fps=(painted-previousPainted)/seconds;decodeFps=(got-previousDecoded)/seconds;mbps=(size-previousBytes)*8.0/seconds/1000000;double live=connectedAt==0?0:(now-connectedAt)/(double)Stopwatch.Frequency;
             if(running&&currentHeader!=null&&live>3){samples.Add(Wire.Map("elapsed_s",live,"painted_fps",fps,"decoded_fps",decodeFps,"max_paint_gap_ms",maxGapTicks*1000.0/Stopwatch.Frequency,"mbps",mbps,"distinct_pixel_frames",changed-previousHashChanges,"width",view.SourceSize.Width,"height",view.SourceSize.Height,"preview_width",view.Frame.Width,"preview_height",view.Frame.Height,"capture_ms",currentHeader["capture_ms"],"encode_ms",currentHeader["encode_ms"],"hash_ms",currentHeader["hash_ms"],"server_ms",currentHeader["processing_ms"],"decode_ms",decodeMs));if(samples.Count>300)samples.RemoveAt(0);QueueMetrics(Wire.Map("definition","unique decoded frames actually drawn by preview OnPaint; first 3 seconds excluded","samples",samples.ToArray(),"decoded",got,"painted",painted,"window",displayedWindow,"lossless",true,"status",message,"vision_issue",lastVisionIssue,"route_state",lastRouteState,"automation_running",autoRunning,"automation_pending",autoPending,"session",session==null?"":session.Id));}
             previousDecoded=got;previousPainted=painted;previousBytes=size;previousHashChanges=changed;maxGapTicks=0;bucketAt=now;
         }
@@ -1096,7 +1153,7 @@ public sealed class ControllerForm:Form {
             routes.HasRuntimeRoute&&routes.NavigationTarget.HasValue&&captureFrame==null&&prepareSuccess==null;
         settingsButton.Enabled=captureFrame==null&&prepareSuccess==null;
         previewButton.Enabled=routeWorkspaceButton.Enabled=settingsButton.Enabled;
-        status.Text="  "+(connectionFault??message);metrics.Text=view.Frame==null||routeSurface.Visible?"":String.Format("{0}×{1}  ·  {2:F1} FPS  ",view.SourceSize.Width,view.SourceSize.Height,fps);control.PresentsPauseAction=armed||armPending;control.Text=armed?"暂停控制（F12）":armPending?"取消开启":"开启手动控制";runButton.Text=routeTrial?"停止试走":autoPending?"取消准备":autoRunning?"暂停脚本":settingsDirty||setupRequired?"请先保存":"开启脚本";saveSettings.Enabled=(settingsDirty||setupRequired)&&!autoRunning&&!autoPending;runButton.Enabled=routeTrial||autoPending||autoRunning||!settingsDirty&&!setupRequired&&running&&previewReady&&Interlocked.Read(ref target)!=0&&captureFrame==null;control.Visible=!settingsOpen||captureFrame!=null||sideTabs.SelectedTab==routePage&&routes.ManualCaptureActive;control.Enabled=!autoRunning&&!autoPending&&running&&captureFrame==null&&view.Frame!=null&&displayedWindow==Interlocked.Read(ref target);typeText.Enabled=control.Enabled;control.BackColor=armed?AppUi.Selection:control.Enabled?AppUi.Field:AppUi.Surface;UpdateConnectionButton();
+        string gateMetrics=lieRequested?(lieGameActive?lieVision.Metrics():"等待小游戏 · 状态检查0.5秒/次"):"";status.Text="  "+(connectionFault??message);metrics.Text=view.Frame==null||routeSurface.Visible?"":String.Format("{0}×{1}  ·  {2:F1} FPS{3}  ",view.SourceSize.Width,view.SourceSize.Height,fps,String.IsNullOrEmpty(gateMetrics)?"":"  ·  "+gateMetrics);lieButton.Text=lieRequested?"关闭测谎":"开启测谎";lieButton.Enabled=lieRequested||running&&previewReady&&view.Frame!=null&&captureFrame==null;control.PresentsPauseAction=armed||armPending;control.Text=armed?"暂停控制（F12）":armPending?"取消开启":"开启手动控制";runButton.Text=routeTrial?"停止试走":autoPending?"取消准备":autoRunning?"暂停脚本":settingsDirty||setupRequired?"请先保存":"开启脚本";saveSettings.Enabled=(settingsDirty||setupRequired)&&!autoRunning&&!autoPending;runButton.Enabled=routeTrial||autoPending||autoRunning||!settingsDirty&&!setupRequired&&running&&previewReady&&Interlocked.Read(ref target)!=0&&captureFrame==null;control.Visible=!settingsOpen||captureFrame!=null||sideTabs.SelectedTab==routePage&&routes.ManualCaptureActive;control.Enabled=!autoRunning&&!autoPending&&running&&captureFrame==null&&view.Frame!=null&&displayedWindow==Interlocked.Read(ref target);typeText.Enabled=control.Enabled;control.BackColor=armed?AppUi.Selection:control.Enabled?AppUi.Field:AppUi.Surface;UpdateConnectionButton();
     }
     void Disconnect(bool wait=false){
         StopAll("连接已断开，录制已暂停");
@@ -1115,6 +1172,7 @@ public sealed class ControllerForm:Form {
     protected override void Dispose(bool disposing){
         if(disposing){
             timer.Stop();
+            lieVision.Dispose();
             if(connectionWorker!=null||running)Disconnect(true);
             else if(person!=null&&!person.IsDisposed)person.Stop("窗口已关闭");
             lock(frameGate){if(newest!=null)newest.Dispose();newest=null;}

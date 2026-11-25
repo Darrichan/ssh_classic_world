@@ -5,7 +5,7 @@ New-Item -ItemType Directory -Path $env:TEMP -Force|Out-Null
 $csc=$env:WINDIR+'\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $refs=@('/reference:System.dll','/reference:System.Core.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll','/reference:System.IO.Compression.dll','/reference:System.Security.dll')
 $common=@(($Root+'\src\Common.cs'),($Root+'\src\Session.cs'))
-& $csc /nologo /target:winexe /platform:x64 /unsafe+ /optimize+ /codepage:65001 @refs ('/out:'+($Root+'\SSH-Screen-Control.exe')) @common ($Root+'\src\RouteModel.cs') ($Root+'\src\RouteStudio.cs') ($Root+'\src\PlayerVision.cs') ($Root+'\src\Controller.cs')
+& $csc /nologo /target:winexe /platform:x64 /unsafe+ /optimize+ /codepage:65001 @refs ('/out:'+($Root+'\SSH-Screen-Control.exe')) @common ($Root+'\src\AppleControls.cs') ($Root+'\src\WorkspaceModel.cs') ($Root+'\src\WorkspacePanels.cs') ($Root+'\src\CombatEngine.cs') ($Root+'\src\RouteModel.cs') ($Root+'\src\RouteStudio.cs') ($Root+'\src\PlayerVision.cs') ($Root+'\src\LocalTargetTrack.cs') ($Root+'\src\PolygraphGameGate.cs') ($Root+'\src\Controller.cs')
 if($LASTEXITCODE -ne 0){throw 'Controller build failed'}
 if(Test-Path ($Root+'\src\Validate.cs')){
     & $csc /nologo /target:exe /platform:x64 /unsafe+ /optimize+ /codepage:65001 @refs ('/out:'+($Root+'\SSH-Screen-Validate.exe')) @common ($Root+'\src\Validate.cs')
